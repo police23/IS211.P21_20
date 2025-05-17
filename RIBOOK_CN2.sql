@@ -1,0 +1,218 @@
+ALTER SESSION SET "_ORACLE_SCRIPT" = TRUE;
+
+CREATE USER cn2 IDENTIFIED BY 123;
+GRANT CONNECT, DBA TO cn2;
+
+CREATE USER director IDENTIFIED BY 123;
+CREATE USER bridge IDENTIFIED BY 123;
+CREATE USER manager_02 IDENTIFIED BY 123;
+CREATE USER staff_02 IDENTIFIED BY 123;
+
+GRANT CREATE SESSION, CONNECT, RESOURCE TO director;
+
+GRANT CREATE PUBLIC DATABASE LINK TO director;
+GRANT ALTER PUBLIC DATABASE LINK TO director;
+GRANT DROP PUBLIC DATABASE LINK TO director;
+
+GRANT CREATE PUBLIC DATABASE LINK TO manager_02;
+
+GRANT CREATE USER TO director;
+GRANT ALTER USER TO director;
+GRANT DROP USER TO director;
+
+CREATE TABLE CN2.BOOKSTORE (
+    StoreID VARCHAR2(10) PRIMARY KEY,  
+    StoreName VARCHAR2(50) NOT NULL,
+    Address VARCHAR2(100) NOT NULL CHECK (Address = 'HaNoi')
+);
+
+CREATE TABLE CN2.STAFF (
+    StaffID VARCHAR2(10) PRIMARY KEY,
+    FullName VARCHAR2(50) NOT NULL,
+    Gender NUMBER(1) DEFAULT 0 CHECK (Gender IN (0, 1)),
+    DateOfBirth DATE NOT NULL,
+    PhoneNumber VARCHAR2(10) NOT NULL,
+    Address VARCHAR2(100) NOT NULL,
+    WorkYear NUMBER(4) NOT NULL,
+    WorkShift NUMBER(1) DEFAULT 1 CHECK (WorkShift IN (1, 2, 3)),
+    StoreID VARCHAR2(10) NOT NULL,
+    FOREIGN KEY (StoreID) REFERENCES CN2.BOOKSTORE(StoreID)
+);
+
+CREATE TABLE CN2.CUSTOMER (
+    PhoneNumber VARCHAR2(10) PRIMARY KEY,
+    FullName VARCHAR2(50),
+    Gender NUMBER(1) DEFAULT 0 CHECK (Gender IN (0, 1)),
+    DateOfBirth DATE,
+    LoyaltyPoint NUMBER DEFAULT 0,
+    CustomerType VARCHAR2(10) CHECK (CustomerType IN ('Regular', 'Member', 'VIP'))
+);
+
+CREATE TABLE CN2.BOOK (
+    BookID VARCHAR2(10) PRIMARY KEY,
+    Title VARCHAR2(100) NOT NULL,
+    Genre VARCHAR2(50) NOT NULL,
+    Author VARCHAR2(50) NOT NULL,
+    Publisher VARCHAR2(50) NOT NULL,
+    PublishDate DATE NOT NULL,
+    PageCount NUMBER NOT NULL,
+    Price NUMBER(10,2) NOT NULL
+);
+
+CREATE TABLE CN2.INVENTORY_WAREHOUSE (
+    StoreID VARCHAR2(10),
+    BookID VARCHAR2(10),
+    Quantity NUMBER DEFAULT 1,
+    LastUpdate DATE DEFAULT SYSDATE,
+    PRIMARY KEY (StoreID, BookID),
+    FOREIGN KEY (StoreID) REFERENCES CN2.BOOKSTORE(StoreID),
+    FOREIGN KEY (BookID) REFERENCES CN2.BOOK(BookID)
+);
+
+CREATE TABLE CN2.INVENTORY_SALE (
+    StoreID VARCHAR2(10),
+    BookID VARCHAR2(10),
+    Status VARCHAR2(20) DEFAULT 'In stock' CHECK (Status IN ('In stock', 'Out of stock')),
+    PRIMARY KEY (StoreID, BookID),
+    FOREIGN KEY (StoreID) REFERENCES CN2.BOOKSTORE(StoreID),
+    FOREIGN KEY (BookID) REFERENCES CN2.BOOK(BookID)
+);
+
+CREATE TABLE CN2.INVOICE (
+    InvoiceID VARCHAR2(10) PRIMARY KEY,
+    PhoneNumber VARCHAR2(10) NOT NULL,
+    StaffID VARCHAR2(10) NOT NULL,
+    StoreID VARCHAR2(10) NOT NULL,
+    PurchaseTime DATE DEFAULT SYSDATE,
+    TotalAmount NUMBER(10,2) NOT NULL,
+    PaymentMethod VARCHAR2(20) DEFAULT 'Cash' CHECK (PaymentMethod IN ('Cash', 'Credit', 'Loyalty Point')),
+    FOREIGN KEY (PhoneNumber) REFERENCES CN2.CUSTOMER(PhoneNumber),
+    FOREIGN KEY (StaffID) REFERENCES CN2.STAFF(StaffID),
+    FOREIGN KEY (StoreID) REFERENCES CN2.BOOKSTORE(StoreID)
+);
+
+CREATE TABLE CN2.INVOICEDETAIL (
+    InvoiceID VARCHAR2(10),
+    BookID VARCHAR2(10) NOT NULL,
+    Quantity NUMBER DEFAULT 1, 
+    Amount NUMBER(10,2) NOT NULL,
+    PRIMARY KEY (InvoiceID, BookID),
+    FOREIGN KEY (InvoiceID) REFERENCES CN2.INVOICE(InvoiceID),
+    FOREIGN KEY (BookID) REFERENCES CN2.BOOK(BookID)
+);
+
+ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD HH24:MI:SS'
+
+-- 1. Tạo dữ liệu cho BOOKSTORE (bảng cha)
+INSERT INTO CN2.BOOKSTORE (StoreID, StoreName, Address)
+VALUES ('ST01', 'Main Store HN', 'HaNoi');
+
+
+-- 2. Tạo 1,000 bản ghi CUSTOMER
+INSERT INTO CN2.CUSTOMER (PhoneNumber, FullName, Gender, DateOfBirth, LoyaltyPoint, CustomerType)
+SELECT 
+  TO_CHAR(900000000 + LEVEL),
+  'Customer_' || LEVEL,
+  MOD(LEVEL, 2),
+  TO_DATE('1990-01-01', 'YYYY-MM-DD') + MOD(LEVEL, 10000),
+  MOD(LEVEL, 500),
+  CASE MOD(LEVEL, 3)
+    WHEN 0 THEN 'Regular'
+    WHEN 1 THEN 'Member'
+    ELSE 'VIP'
+  END
+FROM dual
+CONNECT BY LEVEL <= 1000;
+
+-- 3. Tạo 1,000 bản ghi BOOK
+INSERT INTO CN2.BOOK (BookID, Title, Genre, Author, Publisher, PublishDate, PageCount, Price)
+SELECT
+  'B' || LPAD(LEVEL, 4, '0'),
+  'Book ' || LEVEL,
+  CASE MOD(LEVEL, 3)
+    WHEN 0 THEN 'Fiction'
+    WHEN 1 THEN 'Science'
+    ELSE 'History'
+  END,
+  'Author ' || LEVEL,
+  'Publisher ' || MOD(LEVEL, 5),
+  TO_DATE('2010-01-01', 'YYYY-MM-DD') + MOD(LEVEL, 3650),
+  100 + MOD(LEVEL, 300),
+  5 + MOD(LEVEL, 50)
+FROM dual
+CONNECT BY LEVEL <= 1000;
+
+-- 4. Tạo 1,000 bản ghi STAFF (tham chiếu StoreID = 'ST01')
+INSERT INTO CN2.STAFF (StaffID, FullName, Gender, DateOfBirth, PhoneNumber, Address, WorkYear, WorkShift, StoreID)
+SELECT
+  'S' || LPAD(LEVEL, 4, '0'),
+  'Staff ' || LEVEL,
+  MOD(LEVEL, 2),
+  TO_DATE('1980-01-01', 'YYYY-MM-DD') + MOD(LEVEL, 10000),
+  TO_CHAR(910000000 + LEVEL),
+  'HaNoi',
+  2010 + MOD(LEVEL, 15),
+  MOD(LEVEL, 3) + 1,
+  'ST01'
+FROM dual
+CONNECT BY LEVEL <= 1000;
+select * from cn2.staff;
+
+-- 5. Tạo 1,000,000 bản ghi INVOICE (Transaction table)
+-- Do giới hạn bộ nhớ, bạn nên chạy theo từng đợt 100,000 bản ghi.
+-- Ví dụ đây là 100,000 bản ghi đầu tiên:
+
+INSERT INTO CN2.INVOICE (InvoiceID, PhoneNumber, StaffID, StoreID, PurchaseTime, TotalAmount, PaymentMethod)
+SELECT
+  'INV' || LPAD(LEVEL, 7, '0'),
+  TO_CHAR(900000000 + MOD(LEVEL-1, 1000) + 1),  -- Ensures values between 900000001 and 900001000
+  'S' || LPAD(CASE WHEN MOD(LEVEL-1, 1000) + 1 > 1000 THEN 1000 ELSE MOD(LEVEL-1, 1000) + 1 END, 4, '0'),  -- Ensures StaffIDs from S0001 to S1000
+  'ST01',
+  SYSDATE - MOD(LEVEL, 1000),
+  100 + MOD(LEVEL, 1000),
+  CASE MOD(LEVEL, 3)
+    WHEN 0 THEN 'Cash'
+    WHEN 1 THEN 'Credit'
+    ELSE 'Loyalty Point'
+  END
+FROM dual
+CONNECT BY LEVEL <= 1000000;
+COMMIT;
+
+-- Bạn cần chạy lại đoạn trên 10 lần, mỗi lần thay OFFSET (ví dụ LEVEL + 100000 mỗi lần) để được 1 triệu bản ghi.
+
+-- 6. Tạo INVOICEDETAIL (chi tiết hóa đơn) tương ứng
+INSERT INTO CN2.INVOICEDETAIL (InvoiceID, BookID, Quantity, Amount)
+SELECT
+  'INV' || LPAD(LEVEL, 7, '0'),
+  'B' || LPAD(MOD(LEVEL, 1000) + 1, 4, '0'),
+  1 + MOD(LEVEL, 3),
+  (5 + MOD(LEVEL, 50)) * (1 + MOD(LEVEL, 3))
+FROM dual
+CONNECT BY LEVEL <= 1000000;
+
+COMMIT;
+
+-- Insert dữ liệu cho INVENTORY_WAREHOUSE
+INSERT INTO CN2.INVENTORY_WAREHOUSE (StoreID, BookID, Quantity, LastUpdate)
+SELECT 
+  'ST01',
+  'B' || LPAD(LEVEL, 4, '0'),
+  10 + MOD(LEVEL, 50),
+  SYSDATE - MOD(LEVEL, 30)
+FROM dual
+CONNECT BY LEVEL <= 1000;
+
+-- Insert dữ liệu cho INVENTORY_SALE
+INSERT INTO CN2.INVENTORY_SALE (StoreID, BookID, Status)
+SELECT
+  'ST01',
+  'B' || LPAD(LEVEL, 4, '0'),
+  CASE WHEN MOD(LEVEL, 10) < 8 THEN 'In stock' ELSE 'Out of stock' END
+FROM dual
+CONNECT BY LEVEL <= 1000;
+
+commit;
+
+
+
