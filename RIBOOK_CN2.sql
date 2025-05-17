@@ -159,8 +159,6 @@ CONNECT BY LEVEL <= 1000;
 select * from cn2.staff;
 
 -- 5. Tạo 1,000,000 bản ghi INVOICE (Transaction table)
--- Do giới hạn bộ nhớ, bạn nên chạy theo từng đợt 100,000 bản ghi.
--- Ví dụ đây là 100,000 bản ghi đầu tiên:
 
 INSERT INTO CN2.INVOICE (InvoiceID, PhoneNumber, StaffID, StoreID, PurchaseTime, TotalAmount, PaymentMethod)
 SELECT
@@ -179,9 +177,8 @@ FROM dual
 CONNECT BY LEVEL <= 1000000;
 COMMIT;
 
--- Bạn cần chạy lại đoạn trên 10 lần, mỗi lần thay OFFSET (ví dụ LEVEL + 100000 mỗi lần) để được 1 triệu bản ghi.
+-- 6. Tạo INVOICEDETAIL (chi tiết hóa đơn) tương ứng với mỗi hóa đơn
 
--- 6. Tạo INVOICEDETAIL (chi tiết hóa đơn) tương ứng
 INSERT INTO CN2.INVOICEDETAIL (InvoiceID, BookID, Quantity, Amount)
 SELECT
   'INV' || LPAD(LEVEL, 7, '0'),
